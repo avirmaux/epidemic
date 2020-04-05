@@ -19,7 +19,27 @@ import numpy as np
 import scipy as sp
 import scipy.integrate as integrate
 
+import torch
+import torch.nn as nn
+
 NSTEPS = 1000 # Number of steps for ODE solver
+
+def SIR_eq_batch(x, t, beta, gamma):
+    """ SIR model for batch computations
+
+    Note that it doesn't depend on t
+    """
+    S = x[:, 0]
+    I = x[:, 1]
+    R = x[:, 2]
+    n = x.sum(axis=1)
+
+    term_infection = beta * S * I / n
+    term_recovery = gamma * I
+
+    return torch.stack((S - term_infection,
+                        I + term_infection - term_recovery,
+                        R + term_recovery), axis=1)
 
 class SIR:
 
@@ -45,6 +65,68 @@ class SIR:
         steps = np.linspace(t_begin, t_end, n_steps)
         simul = integrate.odeint(f, initial_state, steps)
         return simul, steps
+
+
+class SIRModelEuler(nn.Module):
+
+    def __init__(self, step, beta=0.5, gamma=0.5, n_timesteps=10):
+        """ SIR through Euler explicit method
+
+        Args:
+        -----
+        n: population size
+        step: Euler step
+        """
+        super(SIRModelEuler, self).__init__()
+        # Initial parameters
+        self.beta = nn.Parameter(torch.Tensor([beta]))
+        self.gamma = nn.Parameter(torch.Tensor([gamma]))
+        self.n_timesteps = n_timesteps
+        self.step = step
+
+    def forward(self, x):
+        """ Perform explicit Euler steps from initial condition `x`
+        """
+        n = torch.sum(x, axis=1)
+        traj = [x]
+        for i in range(self.n_timesteps - 1):
+            traj.append(SIR_eq_batch(x, 0, self.beta, self.gamma))
+
+        return torch.stack(traj, axis=1)
+
+
+class SIRModelRK(nn.Module):
+
+    def __init__(self, step, beta=0.5, gamma=0.5, n_timesteps=10):
+        """ SIR through RK 4 explicit method
+
+        Args:
+        -----
+        n: population size
+        step: Euler step
+        """
+        super(SIRModelRK, self).__init__()
+        # Initial parameters
+        self.beta = nn.Parameter(torch.Tensor([beta]))
+        self.gamma = nn.Parameter(torch.Tensor([gamma]))
+        self.n_timesteps = n_timesteps
+        self.step = step
+
+    def forward(self, x):
+        """ Perform explicit Euler steps from initial condition `x`
+        """
+        n = torch.sum(x, axis=1)
+        traj = [x]
+        for i in range(self.n_timesteps - 1):
+            # RK
+            k1 = SIR_eq_batch(traj[i], 0, self.beta, self.gamma)
+            k2 = SIR_eq_batch(traj[i] + self.step*k1/2, 0, self.beta, self.gamma)
+            k3 = SIR_eq_batch(traj[i] + self.step*k2/2, 0, self.beta, self.gamma)
+            k4 = SIR_eq_batch(traj[i] + self.step*k3, 0, self.beta, self.gamma)
+
+            traj.append(x + (1/6) * self.step * (k1 + 2*k2 + 2*k3 + k4))
+
+        return torch.stack(traj, axis=1)
 
 
 def noise_fn(t):
