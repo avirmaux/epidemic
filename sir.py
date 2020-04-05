@@ -21,103 +21,36 @@ import scipy.integrate as integrate
 
 NSTEPS = 1000 # Number of steps for ODE solver
 
+class SIR:
 
-def SIR(n, n_contacts, p_contact, gamma, n_days, y0=None):
-    """ SIR model
+    def __init__(self, beta, gamma):
+        """ SIR model
 
-    Args:
-    -----
-    n: population size
-    n_contacts: number of contact each day
-    p_contact: probability of infction when in contact
-    gamma: transition rate Infectious -> Recovered
-    n_days: length of the simulation
-    y0 (optional): initial state on the form [S, I, R]
+        Args:
+        -----
+        beta: infection rate
+        gamma: recovery rate
+        """
+        self.beta = beta
+        self.gamma = gamma
 
-    beta: average number of contacts each day
-    """
-    beta = n_contacts * p_contact
-    def f(y, t):
-        # S, I, R = y[0], y[1], y[2]
-        S, I, R = y
-        return np.array([
-            -beta * I * S / n,
-            beta * I * S / n - gamma * I,
-            gamma * I])
+    def simulate(self, initial_state, t_begin, t_end, n_steps):
+        n = initial_state[0]
+        def f(y, t):
+            S, I, R = y
+            return np.array([
+                -self.beta * I * S / n,
+                self.beta * I * S / n - self.gamma * I,
+                self.gamma * I])
+        steps = np.linspace(t_begin, t_end, n_steps)
+        simul = integrate.odeint(f, initial_state, steps)
+        return simul, steps
 
-    if y0 is None:
-        y0 = np.array([n, 1, 0]) # initial state: one person is sick
-    sol = integrate.odeint(f, y0, np.linspace(0, n_days, NSTEPS))
-    return sol
-
-def SIR_confinement(n, n_contacts, p_contact, gamma, n_days, start_confinement, confinement_efficiency, y0=None):
-    """ SIR model
-
-    Args:
-    -----
-    n: population size
-    n_contacts: number of contact each day
-    p_contact: probability of infction when in contact
-    gamma: transition rate Infectious -> Recovered
-    n_days: length of the simulation
-    start_confinement: start of confinement
-    confinement_efficiency: factor to beta after confinement
-    y0 (optional): initial state on the form [S, I, R]
-
-    beta: average number of contacts each day
-    """
-    BETA = n_contacts * p_contact
-    def f(y, t, beta=BETA):
-        # S, I, R = y[0], y[1], y[2]
-        S, I, R = y
-        if t > start_confinement:
-            beta = beta * confinement_efficiency
-        return np.array([
-            -beta * I * S / n,
-            beta * I * S / n - gamma * I,
-            gamma * I])
-
-    if y0 is None:
-        y0 = np.array([n, 1, 0]) # initial state: one person is sick
-    sol = integrate.odeint(f, y0, np.linspace(0, n_days, NSTEPS))
-    return sol
-
-def SIR_confinement_period(n, n_contacts, p_contact, gamma, n_days, start_confinement, confinement_efficiency, length_confinement, y0=None):
-    """ SIR model
-
-    Args:
-    -----
-    n: population size
-    n_contacts: number of contact each day
-    p_contact: probability of infction when in contact
-    gamma: transition rate Infectious -> Recovered
-    n_days: length of the simulation
-    start_confinement: start of confinement
-    confinement_efficiency: factor to beta after confinement
-    y0 (optional): initial state on the form [S, I, R]
-
-    beta: average number of contacts each day
-    """
-    BETA = n_contacts * p_contact
-    def f(y, t, beta=BETA):
-        # S, I, R = y[0], y[1], y[2]
-        S, I, R = y
-        if t > start_confinement and t < start_confinement + length_confinement:
-            beta = beta * confinement_efficiency
-        return np.array([
-            -beta * I * S / n,
-            beta * I * S / n - gamma * I,
-            gamma * I])
-
-    if y0 is None:
-        y0 = np.array([n, 1, 0]) # initial state: one person is sick
-    sol = integrate.odeint(f, y0, np.linspace(0, n_days, NSTEPS))
-    return sol
 
 def noise_fn(t):
     """ Yup, that's noise...
     """
-    return math.sin(t*t)
+    return math.sin((t+10)*(t+10))
 
 def SIR_noise(n, n_contacts, p_contact, gamma, n_days, y0=None, noise=noise_fn):
     """ SIR model with noise
